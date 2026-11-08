@@ -616,7 +616,13 @@ app.get('/proxy/hls/segment.ts', async (req: any, res: any) => {
             return res.status(statusCode || 502).send('Upstream error');
         }
 
-        const contentType = respHeaders['content-type'] || 'video/mp2t';
+        // VixSrc serves encrypted MPEG-TS segments as text/html. Keep binary
+        // responses such as HLS keys intact, but label disguised segments correctly.
+        const rawContentType = respHeaders['content-type'];
+        const upstreamContentType = Array.isArray(rawContentType) ? rawContentType[0] : rawContentType;
+        const contentType = upstreamContentType?.toLowerCase().startsWith('text/html')
+            ? 'video/mp2t'
+            : upstreamContentType || 'video/mp2t';
         res.setHeader('Content-Type', contentType);
         res.setHeader('Cache-Control', 'public, max-age=3600');
 
