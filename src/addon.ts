@@ -611,8 +611,11 @@ app.get('/proxy/hls/segment.ts', async (req: any, res: any) => {
 
         if (!upstream) return res.status(400).send('Missing upstream URL');
 
-        const { body, statusCode, headers: respHeaders } = await request(upstream, { headers });
-        if (statusCode !== 200) {
+        const requestHeaders = req.headers.range
+            ? { ...headers, Range: req.headers.range }
+            : headers;
+        const { body, statusCode, headers: respHeaders } = await request(upstream, { headers: requestHeaders });
+        if (statusCode !== 200 && statusCode !== 206) {
             return res.status(statusCode || 502).send('Upstream error');
         }
 
@@ -623,8 +626,14 @@ app.get('/proxy/hls/segment.ts', async (req: any, res: any) => {
         const contentType = upstreamContentType?.toLowerCase().startsWith('text/html')
             ? 'video/mp2t'
             : upstreamContentType || 'video/mp2t';
+        res.status(statusCode);
         res.setHeader('Content-Type', contentType);
         res.setHeader('Cache-Control', 'public, max-age=3600');
+        for (const name of ['content-length', 'content-range', 'accept-ranges']) {
+            const value = respHeaders[name];
+            if (value) res.setHeader(name, value);
+        }
+        res.setHeader('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Accept-Ranges');
 
         // Stream with proper backpressure: CDN → player
         await pipeline(body, res);
